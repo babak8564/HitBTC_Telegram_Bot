@@ -213,12 +213,9 @@ def save_chat_id():
             f.write(m)
             old_chat_id = set(all_chat_id)
 
-def app(n, group_id):
+def app(n):
     global current_received_message, all_chat_id, t_receive
     open_chat_id()
-    os_info = platform.uname()
-    msg = f'New shift started from: \n\nOS: {os_info[0]} \nUser: {os_info[1]}\n'
-    send_message(message=msg, chat_id=group_id)
     data = update_telegram_bot()
     i = 0
     try:
@@ -253,10 +250,7 @@ def app(n, group_id):
     except:
         print("problem with internet connection")
         save_chat_id()
-    msg = f'\nThe shift in the following machine is over: \n\nOS: {os_info[0]} \nUser: {os_info[1]}\n'
-    # send_message(message=msg, chat_id=group_id)
-    # print(all_chat_id, old_chat_id)
     save_chat_id()
 
 if __name__ == "__main__":
-    app(n=1, group_id=-548993014)
+    app(n=1)
