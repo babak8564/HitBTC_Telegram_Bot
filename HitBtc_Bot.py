@@ -1,13 +1,62 @@
-import requests
 from urllib import request
 import time
+import tempfile as tp
 import os
 import platform
-
+import requests
+import matplotlib.pyplot as plt
+from matplotlib import ticker as mticker
+from tools import OHLC_DataFrame
 global all_chat_id, bot_token, bot_url
+
 proxy = request.getproxies()
-bot_token = ''
+bot_token = 'bot1934828136:AAEoxVA2PEpoNv7fl8SNIh1t9WwVQBbeX9o'
 bot_url = 'https://api.telegram.org'
+
+def prepare_ma_args(pair='BTCUSDT', type_='sma', time_frame='d1', *periods):
+    def is_pair(v:str):
+        if (v.isdigit()) or is_type(v) or is_tframe(v):
+            return False
+        return True
+
+    def is_type(v):
+        if v in ['sma', 'wma', 'vwma']:
+            return True
+        return False
+
+    def is_tframe(v):
+        if v in ['m1','m3','m5','m15','m30','h1','h4', 'd1', 'd7','1m']:
+            return True
+        return False
+
+    def argument(pair=pair, type_=type_, time_frame=time_frame, periods=periods):
+        l = []
+        for item in [pair,type_,time_frame]:
+            if item.isdigit():
+                l.append(int(item))
+        if not is_pair(pair):
+            if is_type(pair):
+                type_ = pair
+            elif is_tframe(pair):
+                time_frame = pair
+            pair = 'btcusdt'
+        if not is_type(type_):
+            if is_tframe(type_):
+                time_frame = type_
+            type_ = 'sma'
+        if not is_tframe(time_frame):
+            time_frame = 'd1'
+        if len(l)==0 and len(periods)==0:
+            l = [100]
+        for item in periods:
+            try:
+                l.append(int(item))
+            except:
+                continue
+
+        return (pair, type_, time_frame, l)
+
+    return argument()
 
 def open_chat_id():
     global all_chat_id, old_chat_id
@@ -22,13 +71,10 @@ def open_chat_id():
         old_chat_id = set()
         all_chat_id = set()
 
-def get_candle(limit):
+def get_candle(pair,limit,period):
     global sub_command
-    pair = 'dogeusdt'
-    if sub_command:
-        pair = sub_command
     url = f"https://api.hitbtc.com/api/3/public/candles/{pair}"
-    params = {'period':'d1', 'limit':limit}
+    params = {'period':period, 'limit':limit}
     d = []
     msg = ''
     try:
@@ -42,55 +88,57 @@ def get_candle(limit):
                 msg = 'Data is not received!'
         else:
             msg = f"Error code: {data['status']}\nMessage: {data['message']}"
-            print("Error code: ", data["status"])
-            print(data["message"])
+            # print("Error code: ", data["status"])
+            # print(data["message"])
     except:
-        print("\nConnection Error.\nReturn Empty List!")
+        # print("\nConnection Error.\nReturn Empty List!")
         msg = 'Connection Error.\n Unable to communicate with HitBTC server!\
-            \nMaybe you enter wrong pair or pair dose not exist.'
-        msg = '\n'.join([msg, 'Example of correct pairs: btcusdt, iotabtc, ltcbtc, trxeth...'])
+                \nMaybe you enter wrong pair or pair dose not exist.\
+                \nExample of correct pairs: btcusdt \niotabtc \nltcbtc \ntrxeth...'
     return d, msg
 
-def volume():
-    global sub_command
-    pair = "DOGEUSDT"
-    if sub_command:
-        pair = sub_command.upper()
-    d, msg = get_candle(120)
+def volume(pair = "DOGEUSDT", limit=90, period='d1'):
+    global t_receive
+    d, msg = get_candle(pair,int(limit),period)
     v, v_quote = [], []
     if len(d)>0:
         m0 = f'Pair: {pair} | Exchange: HitBTC\n\n'
         for item in d:
             v.append(float(item['volume']))
             v_quote.append(float(item['volume_quote']))
-        
+        m_time = f'[Response Time: {int(time.time())-t_receive} sec]\n\n'
         m1 = f"Average Volume: {int(sum(v)/len(v))}\nAverage V_quote: {int(sum(v_quote)/len(v_quote))}"
         m2 = f"\n\nCurrent Volume: {item['volume'].split('.')[0]}\nCurrent V_quote: {item['volume_quote'].split('.')[0]}"
-        msg = ''.join([m0,m1,m2])
-    send_message(
-        message=msg,
-        chat_id=current_received_message['chat']['id'],
-        timer=True
-    )
+        msg = ''.join([m_time,m0,m1,m2])
+    method = 'sendMessage'
+    params = {
+        'chat_id':current_received_message['chat']['id'],
+        'text': msg,
+    }
+    send_message(method, params)
 
-def price():
-    global sub_command
-    pair = "DOGEUSDT"
-    if sub_command:
-        pair = sub_command.upper()
-    d ,msg = get_candle(1)
+def price(pair = "DOGEUSDT", period='d1'):
+    global t_receive
+    d ,msg = get_candle(pair, 1, period)
     if len(d)>0:
-        open_ = d[0]['open']
-        close = d[0]['close']
-        low = d[0]['min']
-        high = d[0]['max']
-        msg = f'Pair: {pair} | Exchange: HitBTC\n\n'
-        msg = f"{msg}Open: {open_}\nClose: {close}\nLow: {low}\nHigh: {high}"
-    send_message(
-        message=msg,
-        chat_id=current_received_message['chat']['id'],
-        timer=True
-    )
+        close = d[0]['close'].split('.')
+        close = ''.join([close[0],'\.',close[1]])
+        price = (float(d[0]['open'])+float(d[0]['close'])+float(d[0]['min'])+float(d[0]['max']))/4
+        price = str(price).split('.')
+        price = ''.join([price[0],'\.',price[1]])
+        msg = f'__Pair__: {pair} \| __Exchange__: HitBTC\n\n'
+        msg = f"{msg}_OHLC4 price_: {price}\n_Current price_: {close}\n"
+    m_time = f'[Response Time: {int(time.time())-t_receive} sec]\n\n'
+    msg = ''.join([m_time, msg])
+    method = 'sendMessage'
+    params = {
+        'chat_id':current_received_message['chat']['id'],
+        'text': msg,
+        'parse_mode':'MarkdownV2'
+    }
+    print(msg)
+    send_message(method, params)
+    print("Message sent")
 
 def is_withdraw_enabled(coin):
     url = f'https://api.hitbtc.com/api/3/public/currency/{coin}'
@@ -101,54 +149,115 @@ def is_withdraw_enabled(coin):
         payout_enabled = data['networks'][0]['payout_enabled']
         return payout_enabled
 
-def hitbtc_withdraw_enabled():
-    global sub_command
-    coin = 'doge'
-    if sub_command:
-        coin = sub_command
+def hitbtc_withdraw_enabled(coin='doge'):
+    global t_receive
     payout_enabled = is_withdraw_enabled(coin)
-    msg = f"withdraw for [{coin.upper()}] is enable" if payout_enabled else f"withdraw for [{coin.upper()}] is not enable"
-    send_message(
-        message=msg, 
-        chat_id=current_received_message['chat']['id'],
-        timer=True
-    )
+    m_time = f'[Response Time: {int(time.time())-t_receive} sec]\n\n'
+    msg = f"{m_time}withdraw for [{coin.upper()}] is enable" if payout_enabled else f"withdraw for [{coin.upper()}] is not enable"
+    method = 'sendMessage'
+    params = {
+        'chat_id':current_received_message['chat']['id'],
+        'text': msg,
+    }
+    send_message(method, params)
 
 def start():
     m0 = f"Hi {current_received_message['from']['first_name']}\n"
-    m1= 'I am a robot. My name is HitBTC_Alert. Please use the following commands to communicate with me.'
+    m1= 'I am a robot. My name is HitBTC_Alert\. Please use the following commands to communicate with me\.'
     m2 = ''
     for item in func_dict:
         if '@' not in item:
             if 'start' not in item:
                 m2 = '\n'.join([m2,item])
-    m3 = '\n\nYou can do more things. 🤩\
-        \nFor example use the following pattren to get information about other coins and pairs in HitBTC exchange\
-        \ncommand-pair or command-coin like: \n/price-btcusdt\n/is_withdraw_enabled-iota\n/volume-ethbtc'
+    m3 = '\n\nYou can do more things\. 🤩\
+        \nUse the following pattrens to get information about other coins and pairs in HitBTC exchange\
+        \nExamples: \n/price,btcusdt,m1\n/is_withdraw_enabled,iota\n/volume,ethbtc,d7,90\
+        \n/ma,btcusdt,wma,d1,55,89\n*ma* is the short of Moving Average\. sma, wma, vma and ema are supported\.'
     msg = ''.join([m0,m1,m2,m3])
-    send_message(message=msg, chat_id=current_received_message['chat']['id'], timer=True)
-
-def send_message(message, chat_id:int, ch_username:str=None, timer=False):
-    global t_receive, bot_token, bot_url
-    id_list = [chat_id] # like: -264205239
-    if timer:
-        m_time = f'[Response Time: {int(time.time())-t_receive} sec]\n\n'
-        message = ''.join([m_time, message])
     method = 'sendMessage'
-    if ch_username:
-        id_list.append(ch_username)
-    for id in id_list:
+    params = {
+        'chat_id':current_received_message['chat']['id'],
+        'text': msg,
+        'parse_mode':'MarkdownV2'
+    }
+    send_message(method, params)
+
+def send_message(method:str, params:dict, files=None):
+    global bot_token, bot_url
+    req = '/'.join([bot_url, bot_token, method])
+    resp = requests.post(url=req, params=params, proxies=proxy, files=files)
+    data = resp.json()
+    chat_id = current_received_message['chat']['id']
+    if data['ok']:
+        print(f"Message has been send to {chat_id}")
+    else:
+        print('unable to send message', data)
+
+def moving_average(pair='BTCUSDT', type_='sma', time_frame='d1', *periods):
+    global t_receive
+    args = prepare_ma_args(pair,type_,time_frame, *periods)
+    d_msg = {
+        'sma': f"__Simple Moving Average__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n",
+        'wma': f"__Weighted Moving Average__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n",
+        'vwma': f"__Volume Weighted Moving Average__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n"
+    }
+    price_msg = ''
+    print(args[0], args[1], args[2], args[3])
+    # periods = list(map(int, periods))
+    f = tp.TemporaryFile('w+b')
+    limit = max(args[3])*2
+    d,msg = get_candle(args[0], limit, args[2])
+    if len(d)>0:
+        close = d[0]['close'].split('.')
+        close = ''.join([close[0],'\.',close[1][:6]])
+        price_msg = ''.join([price_msg, f"__Price__: {close}\n"])
+        # opens = list(map(lambda data:float(data['open']), d[::-1]))
+        timestamp = list(map(lambda data:data['timestamp'], d[::-1]))
+        fig,ax = plt.subplots(figsize=(13,6),frameon=False, dpi=100)
+        df = OHLC_DataFrame(d[::-1])
+        x = range(len(df.price))
+        df.candlestick_ochl(ax)
+        # p = ax.plot(x, df.price, label='price: OHLC')
+        for period in args[3]:
+            data = df.moving_average(args[1], period)
+            mvp = str(data[-1]).split('.')
+            mvp = ''.join([mvp[0],'\.',mvp[1][:6]])
+            price_msg = ''.join([price_msg, f'__{args[1]}{period}__: {mvp}\n'])
+            ax.plot(x[period-1:], data, label=f"{args[1].upper()}:{period}")
+        ax.legend()
+        # ax.set_xlim(0, len(df.price))
+        x_lim = list(map(int,ax.get_xticks()))
+        x_lim[-1] = x_lim[-1]-1
+        date = []
+        # print(x_lim)
+        for i in x_lim:
+            if i > len(timestamp)-1:
+                break
+            date.append(timestamp[i].split('T')[0][2:7])
+        x_lim = x_lim[:len(date)]
+        # print(date)
+        # ax.xaxis.set_major_locator(mticker.MaxNLocator(3))
+        ax.xaxis.set_major_locator(mticker.FixedLocator(x_lim))
+        ax.set_xticklabels(date)
+        plt.savefig(f)
+        f.seek(0)
+        # plt.delaxes(p[0])
+        # plt.plot(range(100,10000))
+        # plt.show()
+        m_time = f'[Response Time: {int(time.time())-t_receive} sec]\n\n'
+        
+        msg = ''.join([m_time,d_msg[args[1]], price_msg])
+        photo = {'photo':f}
         params = {
-            'chat_id':id,
-            'text': message,
+            'chat_id':current_received_message['chat']['id'],
+            'caption': msg,
+            'parse_mode':'MarkdownV2'
         }
-        req = '/'.join([bot_url, bot_token, method])
-        resp = requests.post(url=req, params=params, proxies=proxy)
-        data = resp.json()
-        if data['ok']:
-            print(f"Message has been send to {id}")
-        else:
-            print('unable to send message')
+        
+        method = 'sendPhoto'
+        send_message(method,params,photo)
+    else:
+        print(d, msg)
 
 def update_telegram_bot(offset:int=None, allowed_updates:list=None):
     global bot_token, bot_url
@@ -173,16 +282,17 @@ def is_command():
         return False
 
 def run_func():
-    global sub_command
-    command = current_received_message['text'].split('-')
-    main_command = command[0].replace(' ', '')
-    if len(command)==2:
-        sub_command = command[1].replace(' ', '')
-    else:
-        sub_command = None
+    commands = current_received_message['text'].split(',')
+    main_command = commands[0].replace(' ', '')
+    sub_command = []
+    if len(commands)>=2:
+        for command in commands[1:]:
+            sub_command.append(command.replace(' ', ''))
+
+    print(f"commands: {commands} and sub_command: {sub_command}")
     val = func_dict.get(main_command)
     if val:
-        val()
+        val(*sub_command)
         # message = f"*{current_received_message['from']['first_name']}*\n{func_msg[command](ans)}"
     else:
         msg = ''
@@ -190,14 +300,24 @@ def run_func():
             if '@' not in item:
                 if 'start' not in item:
                     msg = '\n'.join([msg,item])
+        
         msg = f"This command is not support.\nUse the following commands:\n{msg}"
-        send_message(msg, chat_id=current_received_message['chat']['id'], timer=True)
+        print("unable to send!!!!")
+        method = 'sendMessage'
+        params = {
+            'chat_id':current_received_message['chat']['id'],
+            'text': msg,
+        }
+        send_message(method,params)
+        print("massege sent")
 
 func_dict = {
     '/start':start,
     '/start@HitBTCAlert_bot':start,
     '/is_withdraw_enabled':hitbtc_withdraw_enabled,
     '/is_withdraw_enabled@HitBTCAlert_bot':hitbtc_withdraw_enabled,
+    '/ma':moving_average,
+    '/ma@HitBTCAlert_bot':moving_average,
     '/price':price,
     '/price@HitBTCAlert_bot':price,
     '/volume':volume,
@@ -213,9 +333,12 @@ def save_chat_id():
             f.write(m)
             old_chat_id = set(all_chat_id)
 
-def app(n):
+def app(n, group_id):
     global current_received_message, all_chat_id, t_receive
     open_chat_id()
+    os_info = platform.uname()
+    msg = f'New shift started from: \n\nOS: {os_info[0]} \nUser: {os_info[1]}\n'
+    # send_message(message=msg, chat_id=group_id)
     data = update_telegram_bot()
     i = 0
     try:
@@ -230,7 +353,7 @@ def app(n):
                 for d in data:
                     current_received_message = d['message']
                     t_receive = current_received_message['date']
-                    print(current_received_message['date'], int(time.time()))
+                    print(t_receive, int(time.time()))
                     all_chat_id.add(str(current_received_message['chat']['id']))
                     # print("text of message: \t", current_received_message)
                     if is_command():
@@ -249,8 +372,13 @@ def app(n):
             i += 1
     except:
         print("problem with internet connection")
+        # print(data)
         save_chat_id()
+    msg = f'\nThe shift in the following machine is over: \n\nOS: {os_info[0]} \nUser: {os_info[1]}\n'
+    # send_message(message=msg, chat_id=group_id)
+    # print(all_chat_id, old_chat_id)
     save_chat_id()
 
 if __name__ == "__main__":
-    app(n=1)
+    app(n=500, group_id=-548993014)
+    # moving_average('iotausdt','vwma','m5','55','200')
