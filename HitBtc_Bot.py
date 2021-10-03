@@ -10,7 +10,7 @@ from tools import OHLC_DataFrame
 global all_chat_id, bot_token, bot_url
 
 proxy = request.getproxies()
-bot_token = 'bot1934828136:AAEoxVA2PEpoNv7fl8SNIh1t9WwVQBbeX9o'
+bot_token = ''
 bot_url = 'https://api.telegram.org'
 
 def prepare_ma_args(pair='BTCUSDT', type_='sma', time_frame='d1', *periods):
