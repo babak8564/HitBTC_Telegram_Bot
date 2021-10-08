@@ -10,7 +10,7 @@ from tools import OHLC_DataFrame
 global all_chat_id, bot_token, bot_url
 
 proxy = request.getproxies()
-bot_token = ''
+bot_token = ""
 bot_url = 'https://api.telegram.org'
 
 def prepare_ma_args(pair='BTCUSDT', type_='sma', time_frame='d1', *periods):
@@ -20,7 +20,7 @@ def prepare_ma_args(pair='BTCUSDT', type_='sma', time_frame='d1', *periods):
         return True
 
     def is_type(v):
-        if v in ['sma', 'wma', 'vwma']:
+        if v in ['sma', 'wma', 'vwma', 'ema', 'vwap']:
             return True
         return False
 
@@ -97,7 +97,7 @@ def get_candle(pair,limit,period):
                 \nExample of correct pairs: btcusdt \niotabtc \nltcbtc \ntrxeth...'
     return d, msg
 
-def volume(pair = "DOGEUSDT", limit=90, period='d1'):
+def volume(pair = "DOGEUSDT", period='d1', limit=90):
     global t_receive
     d, msg = get_candle(pair,int(limit),period)
     v, v_quote = [], []
@@ -121,11 +121,9 @@ def price(pair = "DOGEUSDT", period='d1'):
     global t_receive
     d ,msg = get_candle(pair, 1, period)
     if len(d)>0:
-        close = d[0]['close'].split('.')
-        close = ''.join([close[0],'\.',close[1]])
+        close = d[0]['close'].replace('.', '\.')
         price = (float(d[0]['open'])+float(d[0]['close'])+float(d[0]['min'])+float(d[0]['max']))/4
-        price = str(price).split('.')
-        price = ''.join([price[0],'\.',price[1]])
+        price = str(price).replace('.', '\.')
         msg = f'__Pair__: {pair} \| __Exchange__: HitBTC\n\n'
         msg = f"{msg}_OHLC4 price_: {price}\n_Current price_: {close}\n"
     m_time = f'[Response Time: {int(time.time())-t_receive} sec]\n\n'
@@ -153,7 +151,8 @@ def hitbtc_withdraw_enabled(coin='doge'):
     global t_receive
     payout_enabled = is_withdraw_enabled(coin)
     m_time = f'[Response Time: {int(time.time())-t_receive} sec]\n\n'
-    msg = f"{m_time}withdraw for [{coin.upper()}] is enable" if payout_enabled else f"withdraw for [{coin.upper()}] is not enable"
+    msg = f"withdraw for [{coin.upper()}] is enable" if payout_enabled else f"withdraw for [{coin.upper()}] is not enable"
+    msg = ''.join([f"{m_time}", msg])
     method = 'sendMessage'
     params = {
         'chat_id':current_received_message['chat']['id'],
@@ -162,16 +161,15 @@ def hitbtc_withdraw_enabled(coin='doge'):
     send_message(method, params)
 
 def start():
-    m0 = f"Hi {current_received_message['from']['first_name']}\n"
-    m1= 'I am a robot. My name is HitBTC_Alert\. Please use the following commands to communicate with me\.'
+    user = current_received_message['from']['first_name'].replace('.','\.')
+    m0 = f"Hi {user}\n"
+    m1= 'I am a robot\. My name is HitBTC\_Alert\. Please use the following commands to communicate with me\.'
     m2 = ''
-    for item in func_dict:
-        if '@' not in item:
-            if 'start' not in item:
-                m2 = '\n'.join([m2,item])
+    for item in list_of_command:
+        m2 = '\n'.join([m2,item])
     m3 = '\n\nYou can do more things\. 🤩\
         \nUse the following pattrens to get information about other coins and pairs in HitBTC exchange\
-        \nExamples: \n/price,btcusdt,m1\n/is_withdraw_enabled,iota\n/volume,ethbtc,d7,90\
+        \nExamples: \n/price,btcusdt,m1\n/is\_withdraw\_enabled,iota\n/volume,ethbtc,d7,90\
         \n/ma,btcusdt,wma,d1,55,89\n*ma* is the short of Moving Average\. sma, wma, vma and ema are supported\.'
     msg = ''.join([m0,m1,m2,m3])
     method = 'sendMessage'
@@ -199,13 +197,16 @@ def moving_average(pair='BTCUSDT', type_='sma', time_frame='d1', *periods):
     d_msg = {
         'sma': f"__Simple Moving Average__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n",
         'wma': f"__Weighted Moving Average__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n",
-        'vwma': f"__Volume Weighted Moving Average__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n"
+        'vwma': f"__Volume Weighted Moving Average__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n",
+        'vwap': f"__Volume Weighted Average Price__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n",
+        'ema': f"__Exponantial Moving Average__\n\n*_Pair_*:\t{args[0].upper()}\n*_Time Frame_*:\t{args[2]}\n"
     }
     price_msg = ''
     print(args[0], args[1], args[2], args[3])
     # periods = list(map(int, periods))
     f = tp.TemporaryFile('w+b')
-    limit = max(args[3])*2
+    limit = max(args[3])*2 
+    if limit>1000: limit = 1000
     d,msg = get_candle(args[0], limit, args[2])
     if len(d)>0:
         close = d[0]['close'].split('.')
@@ -219,11 +220,22 @@ def moving_average(pair='BTCUSDT', type_='sma', time_frame='d1', *periods):
         df.candlestick_ochl(ax)
         # p = ax.plot(x, df.price, label='price: OHLC')
         for period in args[3]:
+            if len(d)<period:
+                continue
             data = df.moving_average(args[1], period)
             mvp = str(data[-1]).split('.')
-            mvp = ''.join([mvp[0],'\.',mvp[1][:6]])
+            mvp = ''.join([mvp[0],'\.',mvp[1][:5]])
             price_msg = ''.join([price_msg, f'__{args[1]}{period}__: {mvp}\n'])
-            ax.plot(x[period-1:], data, label=f"{args[1].upper()}:{period}")
+            if len(data)==len(x[period-1:]):
+                ax.plot(x[period-1:], data, label=f"{args[1].upper()}:{period}")
+            else:
+                x1 = []
+                for i in range(period,len(df.price), period):
+                    x1.append(x[i])
+                if len(x1)<len(data):
+                    x1.append(x[-1])
+                print(len(x1), len(data))
+                ax.plot(x1, data, label=f"{args[1].upper()}:{period}")
         ax.legend()
         # ax.set_xlim(0, len(df.price))
         x_lim = list(map(int,ax.get_xticks()))
@@ -233,7 +245,7 @@ def moving_average(pair='BTCUSDT', type_='sma', time_frame='d1', *periods):
         for i in x_lim:
             if i > len(timestamp)-1:
                 break
-            date.append(timestamp[i].split('T')[0][2:7])
+            date.append(timestamp[i].split('T')[0][2:11])
         x_lim = x_lim[:len(date)]
         # print(date)
         # ax.xaxis.set_major_locator(mticker.MaxNLocator(3))
@@ -316,6 +328,8 @@ func_dict = {
     '/start@HitBTCAlert_bot':start,
     '/is_withdraw_enabled':hitbtc_withdraw_enabled,
     '/is_withdraw_enabled@HitBTCAlert_bot':hitbtc_withdraw_enabled,
+    '/is_withdraw_enable':hitbtc_withdraw_enabled,
+    '/is_withdraw_enable@HitBTCAlert_bot':hitbtc_withdraw_enabled,
     '/ma':moving_average,
     '/ma@HitBTCAlert_bot':moving_average,
     '/price':price,
@@ -323,6 +337,8 @@ func_dict = {
     '/volume':volume,
     '/volume@HitBTCAlert_bot':volume
 }
+list_of_command=['/start','/is\_withdraw\_enabled','/price','/volume', '/ma']
+
 def save_chat_id():
     global all_chat_id, old_chat_id
     if all_chat_id != old_chat_id:
@@ -351,14 +367,15 @@ def app(n, group_id):
                 print("Handling Data...")
                 offset = data[-1]['update_id']
                 for d in data:
-                    current_received_message = d['message']
-                    t_receive = current_received_message['date']
-                    print(t_receive, int(time.time()))
-                    all_chat_id.add(str(current_received_message['chat']['id']))
-                    # print("text of message: \t", current_received_message)
-                    if is_command():
-                        # command = current_received_message['text']
-                        run_func()
+                    current_received_message = d.get('message')
+                    if current_received_message:
+                        t_receive = current_received_message['date']
+                        print(t_receive, int(time.time()))
+                        all_chat_id.add(str(current_received_message['chat']['id']))
+                        # print("text of message: \t", current_received_message)
+                        if is_command():
+                            # command = current_received_message['text']
+                            run_func()
                 # print("offset: ", offset)
                 data = update_telegram_bot(offset+1)
             if is_withdraw_enabled('doge'):
@@ -372,7 +389,7 @@ def app(n, group_id):
             i += 1
     except:
         print("problem with internet connection")
-        # print(data)
+        print(data)
         save_chat_id()
     msg = f'\nThe shift in the following machine is over: \n\nOS: {os_info[0]} \nUser: {os_info[1]}\n'
     # send_message(message=msg, chat_id=group_id)
