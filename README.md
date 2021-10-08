@@ -4,20 +4,25 @@
 > Use the following command in order to communicate with bot.
 > 
 > **command**
-> 
->> - /is_withdraw_enable - coin
+>> - /satrt
 >> 
->> - /volume - pair
+>> - /is_withdraw_enable, coin
 >> 
->> - /price - pair
+>> - /volume, pair, timeframe, period
+>> 
+>> - /price, pair
 >>
+>> - /ma, pair, method, timeframe, period or periods
+>> 
 >> For Example:
 >> 
->> /is_withdraw_enable - doge
+>> /is_withdraw_enable, doge
 >> 
->> /volume - ethbtc
+>> /volume, ethbtc, d1, 50
 >> 
->> /price - ltcusdt
+>> /price, ltcusdt
+>> 
+>> /ma, trxusdt, ema, h4, 50,89,233
 >
 >
 
