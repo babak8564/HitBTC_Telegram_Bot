@@ -397,5 +397,5 @@ def app(n, group_id):
     save_chat_id()
 
 if __name__ == "__main__":
-    app(n=500, group_id=-548993014)
+    app(n=500, group_id=-654332)
     # moving_average('iotausdt','vwma','m5','55','200')
